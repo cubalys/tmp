@@ -1,0 +1,51 @@
+{ 
+	"long_sanganbu" : 
+	{ 
+		"title":	"긴 상안부",
+		"description":	"이마가 긴 유형으로 하니와 비슷한 얼굴 비율을 가지고 있습니다.",
+		"remarks":	"",
+		"tags":	"" },
+	"long_junganbu" : 
+	{ 
+		"title":	"긴 중안부",
+		"description":	"얼굴의 중안부(코)가 긴 유형으로 티파니와 비슷한 얼굴 비율을 가지고 있습니다.",
+		"remarks":	"",
+		"tags":	"" },
+	"long_haanbu" : 
+	{ 
+		"title":	"긴 하안부 (긴 턱)",
+		"description":	"얼굴의 하안부 중 턱이 긴 유형으로 연예인 가희님과 비슷한 비율을 가지고 있습니다.",
+		"remarks":	"https://www.yna.co.kr/view/RPR20090909013200353",
+		"tags":	"" },
+	"long_philtrum" : 
+	{ 
+		"title":	"긴 하안부 (긴 인중도 고려할지)",
+		"description":	"얼굴 하안부 인중이 긴 편으로 김나영과 같은 스타일리쉬한 이미지를 연출 할 수 있습니다.",
+		"remarks":	"https://post.naver.com/viewer/postView.nhn?volumeNo=17850478&memberNo=37305250\n\nhttps://m.health.chosun.com/svc/news_view.html?contid=2016032901085",
+		"tags":	"" },
+	"short_sanganbu" : 
+	{ 
+		"title":	"짧은 상안부",
+		"description":	"이마가 짧은 유형으로 연예인 김혜윤님과 비슷한 비율을 가지고 있습니다.",
+		"remarks":	"",
+		"tags":	"" },
+	"short_junganbu" : 
+	{ 
+		"title":	"짧은 중안부",
+		"description":	"중안부가 짧은 유형으로 연예인 송지효와 비슷한 비율을 가지고 있습니다.",
+		"remarks":	"",
+		"tags":	"" },
+	"short_haanbu" : 
+	{ 
+		"title":	"짧은 하안부",
+		"description":	"상/ 중 / 하안부의 비율에서 하안부가 짧은  유형으로, 장도연과 같은 커트 머리로 세련된 이미지를 연출 하거나 반묶음을 할 경우 고급스러운 이미지를 줄 수 있습니다.",
+		"remarks":	"",
+		"tags":	"" },
+	"golden_face" : 
+	{
+		"title":	"황금비율",
+		"description":	"상/중/하안부 비율이 균형 잡혀 있는 황금 비율형으로 거의 모든 헤어스타일을 무난하게 소화 해 낼 수 있습니다.",
+		"remarks":	"",
+		"tags":	"" 
+	} 
+}

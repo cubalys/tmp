@@ -1,0 +1,4 @@
+<Thread(Thread-12, started daemon 140001873753856)>
+start_gan
+end_gan
+send_result

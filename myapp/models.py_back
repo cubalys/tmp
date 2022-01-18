@@ -1,0 +1,159 @@
+from django.db import models
+from django.contrib.postgres.fields import ArrayField
+import django.contrib.postgres.fields
+import subprocess
+import sys
+import json
+import base64
+import cv2
+import gzip, pickle
+import requests 
+import numpy as np
+from numpy import dot
+from numpy.linalg import norm
+from numpy import sqrt
+import time
+from faceshape_carrick import shape
+import os
+import myapp.recommend as rs
+from myapp.personal_color import get_personal_color4 as pc
+from PIL import Image
+from io import BytesIO
+import myapp.stargan_v2.gen_img as gi
+import myapp.crop_img as cr
+from glob import glob
+import shutil
+
+
+sys.path.append("/work/urs-server/myapp/Scon_dyeing")
+
+import myapp.Scon_dyeing.dyeing_img as di
+
+current_path = os.getcwd()
+
+# Create your models here.
+class Person(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    name = models.CharField(max_length=10,default='0')
+
+
+
+class RecommendResult(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="recommend_result", null=True, blank=True)
+    image_input = models.ImageField(upload_to="media", default='default.jpeg')
+    face = models.JSONField(default=dict)
+    face_info=models.JSONField(default=dict)
+    color_info = models.JSONField(default=dict)
+    cropped_image = models.TextField(default=0)
+    recommend_result_hairList = models.BinaryField(default=b'\x08')
+    recommend_result_hairList_json = models.JSONField(default=dict)
+    def save(self, *args, **kwargs):
+        total_time_start = time.time()
+        face_info_tmp=dict()
+        path = '/work/urs-server/media' + self.image_input.url
+        super(RecommendResult, self).save(*args, **kwargs)
+        ########################### facepp API##########################
+        print("facepp api start")
+        starttime = time.time()
+        face_json = shape.get_facepp_api_res(path)
+        self.face = face_json
+        print(face_json)
+        endtime = time.time()
+        print("facepp api end - process time : " + str(endtime - starttime))
+        ########################### faceinfo ###########################
+        print("faceinfo start")
+        starttime = time.time()
+        face_info_tmp.update(shape.get_face_info(face_json))
+        self.face_info = face_info_tmp
+        endtime = time.time()
+        print("faceshape end - process time : " + str(endtime - starttime))
+        ########################### recommend ###########################
+        print("recommend start")
+        starttime = time.time()
+        self.recommend_result_hairList, self.recommend_result_hairList_json = rs.get_rs_result(face_json)
+        endtime = time.time()
+        print("recommend end - process time : " + str(endtime - starttime))
+        ########################### personal color ###########################
+        print("personal color start")
+        starttime = time.time()
+        self.color_info = pc.get_pc("/work/urs-server/myapp/personal_color/79999_iter.pth", path)
+        endtime = time.time()
+        print(self.color_info)
+        print("personal color end - process time : "+ str(endtime - starttime))
+        total_time_end = time.time()
+        print("total_time : " + str(total_time_end - total_time_start))
+        return
+
+class GanRequest(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    user_image = models.ImageField(upload_to="media", default='default.jpeg')
+    hair_color = models.CharField(max_length=20, default = 'default')
+    hair_style = models.CharField(max_length=20, default = 'default')
+    gan_image = models.ImageField(upload_to="media", default='default.jpeg')
+    gan_image_base64 = models.TextField(default = '0')
+    def save(self, *args, **kwargs):
+        user_Dir = "/work/urs-server/media/"
+        user_img = self.user_image.url
+        super(GanRequest, self).save(*args, **kwargs)
+        hair_style_req = self.hair_style
+        hair_color_req = self.hair_color
+        result_Dir = "/work/urs-server/myapp/gan_result/"
+
+        if hair_style_req != "default":
+            result_name = "fake_image.jpg"
+            ref_Dir = "/work/urs-server/recommend_hairdataset/UT/"
+            starttime = time.time()
+            print(user_img + " + " + self.hair_style)
+            src_image=user_Dir + user_img
+            ref_image=ref_Dir + self.hair_style
+            cate="len_mid"
+
+            dirPath='/work/urs-server/myapp/stargan_v2'
+
+            src_dir=dirPath + '/assets/representative/input'
+            ref_dir=dirPath + '/assets/representative/ref'
+            
+            src_fl=glob(src_dir+"/*/*")
+            ref_fl=glob(ref_dir+"/*/*")
+
+            for f in src_fl:
+                os.remove(f)
+            for f in ref_fl:
+                os.remove(f)
+            
+            src_fn = os.path.basename(src_image)
+            shutil.copy(src_image, src_dir + "/" + cate + "/"+src_fn)
+            ref_fn = os.path.basename(ref_image)
+            shutil.copy(ref_image, ref_dir + "/" + cate + "/"+ref_fn)
+            gi.main("/work/urs-server/myapp/stargan_v2/urs_config.json")
+            print(user_img.split('/')[2])
+            shutil.copy(result_Dir + result_name, "/work/urs-server/media/media/gan_result/" + user_img.split('/')[2])
+            with open(result_Dir + result_name, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read())
+            self.gan_image_base64 = encoded_string.decode().strip()
+            os.remove(result_Dir + result_name)
+            endtime = time.time()
+            print("GAN process time : " + str(endtime - starttime))
+        if hair_color_req != "default":
+            result_name = "color_image.jpg"
+            ref_Dir = "/work/urs-server/color_dataset/" 
+            # #sys.path.append("/work/urs-server/myapp/Scon_dyeing/")
+            # os.chdir("/work/urs-server/myapp/Scon_dyeing")
+            di.run(user_Dir + user_img, ref_Dir + self.hair_color + '.jpg', result_Dir + result_name)
+            # os.chdir(current_path)
+            # os.chdir("/work/urs-server/myapp/Scon_dyeing")
+            # subprocess.run(['python', '/work/urs-server/myapp/Scon_dyeing/main.py', '--data_src_path', user_Dir + user_img, '--data_ref_path', ref_Dir + self.hair_color + '.jpg', '--result_out_path', result_Dir + result_name, '--gpu_ids', '0'])
+            # os.chdir(current_path)
+            with open(result_Dir + result_name, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read())
+            self.gan_image_base64 = encoded_string.decode().strip()
+            os.remove(result_Dir + result_name)
+
+class SimulationStyleList(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    possible_style_img = models.ImageField(upload_to="media", default='default.jpeg')
+    simulation_style_img = models.ImageField(upload_to="media", default='default.jpeg')
+    recommend = models.ForeignKey(RecommendResult, on_delete=models.CASCADE, related_name="simulation_style_list", null=True, blank=True)
+    def __str__(self):
+        return f"{self.possible_style_img},{self.simulation_style_img}"

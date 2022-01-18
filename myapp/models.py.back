@@ -1,0 +1,166 @@
+from django.db import models
+from django.contrib.postgres.fields import ArrayField
+import django.contrib.postgres.fields
+import subprocess
+import sys
+import json
+
+# Create your models here.
+class Person(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    image_input = models.ImageField(upload_to="media", default='default.jpeg')
+    face_shape_result = models.CharField(max_length=10,default='0')
+    face = models.JSONField(default={"0":"0"})
+    face_shape_table = models.JSONField(default={"0":"0"})
+    face_ratio_table = models.JSONField(default={"0":"0"})
+    recommend_result_faceshape = models.JSONField(default={"0":"0"})
+    recommend_result_faceratio = models.JSONField(default={"0":"0"})
+    face_width_height_ratio = models.JSONField(default={"0":"0"})
+    #face_width_height_ratio = models.FloatField(null=True, blank=True, default=0.0)
+
+    def save(self, *args, **kwargs):
+        #super().save(*args, **kwargs)
+        path = '/work/urs-server/media' + self.image_input.url
+        super(Person, self).save(*args, **kwargs)
+        fs_result_tmp=subprocess.check_output(['python', '/work/faceshape/get_faceshape.py', '/work/faceshape/urs_model.pt', path]) 
+        self.face_shape_result=fs_result_tmp.decode().strip()
+        with open('/work/urs-server/data/face_shape.json', 'r') as f:
+            self.face_shape_table = json.load(f)
+        with open('/work/urs-server/data/face_ratio.json', 'r') as f:
+            self.face_ratio_table = json.load(f)
+        self.recommend_result_faceshape=self.face_shape_table[str(self.face_shape_result)]
+        face_str=str(self.face)
+        face_str=face_str.replace("\'", "\"")
+        face_json=json.loads(face_str)
+        # face_top = ((face_json['face']['landmark']['face']['face_hairline_72']["x"]+face_json['face']['landmark']['face']['face_hairline_74']["x"])/2, (face_json['face']['landmark']['face']['face_hairline_72']["y"]+face_json['face']['landmark']['face']['face_hairline_74']["y"])/2)
+        # face_eyebrow = ((face_json['face']['landmark']['left_eyebrow']['left_eyebrow_31']["x"]+face_json['face']['landmark']['right_eyebrow']['right_eyebrow_31']["x"])/2, (face_json['face']['landmark']['left_eyebrow']['left_eyebrow_31']["y"]+face_json['face']['landmark']['right_eyebrow']['right_eyebrow_31']["y"])/2)
+        # face_noseend = ((face_json['face']['landmark']['nose']['nose_left_47']["x"]+face_json['face']['landmark']['nose']['nose_right_47']["x"])/2, (face_json['face']['landmark']['nose']['nose_left_47']["y"]+face_json['face']['landmark']['nose']['nose_right_47']["y"])/2)
+        # face_jaw = ((face_json['face']['landmark']['c']['face_contour_left_0']["x"]+face_json['face']['landmark']['face']['face_contour_right_0']["x"])/2, (face_json['face']['landmark']['face']['face_contour_left_0']["y"]+face_json['face']['landmark']['face']['face_contour_right_0']["y"])/2)
+        face_top = (face_json['face']['landmark']['face']['face_hairline_72']["y"]+face_json['face']['landmark']['face']['face_hairline_74']["y"])/2
+        face_eyebrow = (face_json['face']['landmark']['left_eyebrow']['left_eyebrow_31']["y"]+face_json['face']['landmark']['right_eyebrow']['right_eyebrow_31']["y"])/2
+        face_noseend = (face_json['face']['landmark']['nose']['nose_left_47']["y"]+face_json['face']['landmark']['nose']['nose_right_47']["y"])/2
+        face_jaw =  (face_json['face']['landmark']['face']['face_contour_left_0']["y"]+face_json['face']['landmark']['face']['face_contour_right_0']["y"])/2
+        sanganbu = face_eyebrow-face_top
+        junganbu = face_noseend-face_eyebrow
+        haanbu = face_jaw-face_noseend
+        face_ratio = "tmp"
+        diff = 1.15
+        if sanganbu > junganbu * diff and sanganbu > haanbu * diff : 
+            face_ratio = "long_sanganbu"
+        elif junganbu > sanganbu * diff and junganbu > haanbu * diff : 
+            face_ratio = "long_junganbu"
+        elif haanbu > sanganbu * diff and haanbu > junganbu * diff : 
+            face_ratio = "long_haanbu"
+        elif sanganbu * diff < junganbu and sanganbu * diff < haanbu :
+            face_ratio = "short_sanganbu" 
+        elif junganbu * diff < sanganbu and junganbu * diff < haanbu :
+            face_ratio = "short_junganbu" 
+        elif haanbu * diff < junganbu and haanbu * diff < sanganbu :
+            face_ratio = "short_haanbu"
+        else :
+            face_ratio = "golden_face" 
+        self.recommend_result_faceratio = self.face_ratio_table[str(face_ratio)]
+        return
+# class FaceShapeJson(models.Model):
+#     no = models.AutoField(db_column='NO', primary_key=True)
+#     face_shape_table = models.JSONField(default= { "short_heart" :{ "Name": "짧은 하트형", "Description_1": "광대 골격과, 턱골격이 모두있는데 광대골격이 턱 골격보다 넓고 강한 하트형 얼굴 입니다.", "Description_2": "하트형 중에서 가로 대비 세로가 짧은 하트형에 속하여 귀여운 이미지를 연출 가능합니다.  광대골격만 커버하면 사각턱 골격은 큰 단점이 되지 않고 오히려 고급스러움을 줄 수 있습니다.", "Celebrity": "구구단 미나"  },  "heart" : { "Name": "하트형", "Description_1": "광대 골격과, 턱골격이 모두있는데 광대골격이 턱 골격보다 넓고 강한 하트형 얼굴 입니다.", "Description_2": "가로대비 세로 비율이 균형 잡혀 있으며,  광대골격만 커버하면 사각턱 골격은 큰 단점이 되지 않고 오히려 고급스러움을 줄 수 있습니다.", "Celebrity": "신민아"  	},  	  "short_squre" : {  "Name": "짧은 사각형",  "Description_1": "옆으로 튀어나온 광대 골격이 없고. 턱골격이 있는 사각 얼굴형입니다.",  "Description_2": "가로 비율 대비 세로 비율이 짧기 때문에 귀여운 이미지를 연출 할 수 있으며, 사각얼굴형은 고급스런 이미지를 연출 할 수 있습니다.",  "Celebrity": "김태리"  },  "square" : {  "Name": "사각형",  "Description_1": "옆으로 튀어나온 광대 골격이 없고. 턱골격이 있는 사각 얼굴형입니다.",  "Description_2": "가로대비 세로 비율이 균형 잡혀 있으며,  사각얼굴형은 고급스런 이미지를 연출 할 수 있습니다.",  "Celebrity": "한효주"  },  "short_round" : {  "Name": "짧은 둥근형",  "Description_1": "얼굴 전체적으로 살이 많아 테두리에 골격, (뼈)가 잘보이지 않는 얼굴형입니다.  주로 모찌모찌한 느낌을 주죠.",  "Description_2": "전체적으로 얼굴 가로 대비 세로 길이가 짧은편이라 귀여운 이미지를 연출 할 수 있습니다.",  "Celebrity": "강민경"  },  "round" : {  "Name": "둥근형",  "Description_1": "얼굴 전체적으로 살이 많아 테두리에 골격, (뼈)가 잘보이지 않는 얼굴형입니다.",  "Description_2": "가로대비 세로 비율이 균형 잡혀 있으며, 주로 모찌모찌한 느낌을 주는 얼굴형이라 귀여운 이미지를 연출 할 수 있습니다.",  "Celebrity": "걸스데이 미나"  },  "oblong" : {  "Name": "긴얼굴형",  "Description_1": "얼굴 넓이에 있어서 이마나 볼, 그리고 턱선에서 거의 변화가 없는 좁은 얼굴형입니다.",  "Description_2": "가로대비 세로 비율이 길어, 세련되고 샤프해 보일 수 있지만 인상이 강하고 날카로워 보이기 쉬운 얼굴형이에요.",  "Celebrity": "차애련, 려원, 이태란"  },  "square_oblong" : {  "Name": "각이 있는 긴 얼굴형",  "Description_1": "옆으로 튀어나온 광대 골격이 없고. 턱골격이 있는 얼굴형인데,   얼굴 넓이에 있어서 이마나 볼, 그리고 턱선에서 거의 변화가 없는 좁은형입니다.",  "Description_2": "가로대비 세로 비율이 길어, 세련되고 샤프해 보일 수 있지만 인상이 강하고 날카로워 보이기 쉬운 얼굴형이에요.   좌우 골격이 있기에 이를 잘 살리면 고급스러운 이미지를 줄 수 있습니다.",  "Celebrity": "정은채, 장도연"  },  "short_Oval" : {  "Name": "계란형 (짧은)",  "Description_1": "광대와 턱 골격이 이상적으로 잡혀있고 눈에 띄게 돌출되어있지 않습니다.",  "Description_2": "가로 대비 세로 비율이 짧아 귀여운 이미지를 줄 수 있습니다.",  "Celebrity": "김유정"  },  "Oval" : {  "Name": "황금비율형",  "Description_1": "광대와 턱 골격이 이상적으로 잡혀있고 눈에 띄게 돌출되어있지 않습니다.",  "Description_2": "얼굴의 가로 세로 비율 역시 황금비율의 얼굴 특징을 보여주고 있습니다.",  "Celebrity": "김태희"  }  })
+    
+
+class RecommendResult(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    #simulation_style_list = ArrayField(models.ImageField(upload_to="media", default='default.jpeg'), null=True, blank=True, default=list)
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="recommend_result", null=True, blank=True)
+    image_input = models.ImageField(upload_to="media", default='default.jpeg')
+    face_shape_result = models.CharField(max_length=10,default='0')
+    face = models.JSONField(default={"0":"0"})
+    face_shape_table = models.JSONField(default={"0":"0"})
+    face_ratio_table = models.JSONField(default={"0":"0"})
+
+    #face_shape_table = models.JSONField(default= { "short_heart" :{ "Name": "짧은 하트형", "Description_1": "광대 골격과, 턱골격이 모두있는데 광대골격이 턱 골격보다 넓고 강한 하트형 얼굴 입니다.", "Description_2": "하트형 중에서 가로 대비 세로가 짧은 하트형에 속하여 귀여운 이미지를 연출 가능합니다.  광대골격만 커버하면 사각턱 골격은 큰 단점이 되지 않고 오히려 고급스러움을 줄 수 있습니다.", "Celebrity": "구구단 미나"  },  "heart" : { "Name": "하트형", "Description_1": "광대 골격과, 턱골격이 모두있는데 광대골격이 턱 골격보다 넓고 강한 하트형 얼굴 입니다.", "Description_2": "가로대비 세로 비율이 균형 잡혀 있으며,  광대골격만 커버하면 사각턱 골격은 큰 단점이 되지 않고 오히려 고급스러움을 줄 수 있습니다.", "Celebrity": "신민아"  	},  	  "short_squre" : {  "Name": "짧은 사각형",  "Description_1": "옆으로 튀어나온 광대 골격이 없고. 턱골격이 있는 사각 얼굴형입니다.",  "Description_2": "가로 비율 대비 세로 비율이 짧기 때문에 귀여운 이미지를 연출 할 수 있으며, 사각얼굴형은 고급스런 이미지를 연출 할 수 있습니다.",  "Celebrity": "김태리"  },  "square" : {  "Name": "사각형",  "Description_1": "옆으로 튀어나온 광대 골격이 없고. 턱골격이 있는 사각 얼굴형입니다.",  "Description_2": "가로대비 세로 비율이 균형 잡혀 있으며,  사각얼굴형은 고급스런 이미지를 연출 할 수 있습니다.",  "Celebrity": "한효주"  },  "short_round" : {  "Name": "짧은 둥근형",  "Description_1": "얼굴 전체적으로 살이 많아 테두리에 골격, (뼈)가 잘보이지 않는 얼굴형입니다.  주로 모찌모찌한 느낌을 주죠.",  "Description_2": "전체적으로 얼굴 가로 대비 세로 길이가 짧은편이라 귀여운 이미지를 연출 할 수 있습니다.",  "Celebrity": "강민경"  },  "round" : {  "Name": "둥근형",  "Description_1": "얼굴 전체적으로 살이 많아 테두리에 골격, (뼈)가 잘보이지 않는 얼굴형입니다.",  "Description_2": "가로대비 세로 비율이 균형 잡혀 있으며, 주로 모찌모찌한 느낌을 주는 얼굴형이라 귀여운 이미지를 연출 할 수 있습니다.",  "Celebrity": "걸스데이 미나"  },  "oblog" : {  "Name": "긴얼굴형",  "Description_1": "얼굴 넓이에 있어서 이마나 볼, 그리고 턱선에서 거의 변화가 없는 좁은 얼굴형입니다.",  "Description_2": "가로대비 세로 비율이 길어, 세련되고 샤프해 보일 수 있지만 인상이 강하고 날카로워 보이기 쉬운 얼굴형이에요.",  "Celebrity": "차애련, 려원, 이태란"  },  "square_oblog" : {  "Name": "각이 있는 긴 얼굴형",  "Description_1": "옆으로 튀어나온 광대 골격이 없고. 턱골격이 있는 얼굴형인데,   얼굴 넓이에 있어서 이마나 볼, 그리고 턱선에서 거의 변화가 없는 좁은형입니다.",  "Description_2": "가로대비 세로 비율이 길어, 세련되고 샤프해 보일 수 있지만 인상이 강하고 날카로워 보이기 쉬운 얼굴형이에요.   좌우 골격이 있기에 이를 잘 살리면 고급스러운 이미지를 줄 수 있습니다.",  "Celebrity": "정은채, 장도연"  },  "short_Oval" : {  "Name": "계란형 (짧은)",  "Description_1": "광대와 턱 골격이 이상적으로 잡혀있고 눈에 띄게 돌출되어있지 않습니다.",  "Description_2": "가로 대비 세로 비율이 짧아 귀여운 이미지를 줄 수 있습니다.",  "Celebrity": "김유정"  },  "Oval" : {  "Name": "황금비율형",  "Description_1": "광대와 턱 골격이 이상적으로 잡혀있고 눈에 띄게 돌출되어있지 않습니다.",  "Description_2": "얼굴의 가로 세로 비율 역시 황금비율의 얼굴 특징을 보여주고 있습니다.",  "Celebrity": "김태희"  }  })
+    #face_ratio_table = models.JSONField(default={ "long_sananbu" : { "Name": "긴 상안부", "Description": "이마가 긴 유형으로 하니와 비슷한 얼굴 비율을 가지고 있습니다.", "Remarks": "", "Tags": "" }, "long_junganbu" : { "Name": "긴 중안부", "Description": "얼굴의 중안부(코)가 긴 유형으로 티파니와 비슷한 얼굴 비율을 가지고 있습니다.", "Remarks": "", "Tags": "" }, "long_haanbu" : { "Name": "긴 하안부 (긴 턱)", "Description": "얼굴의 하안부 중 턱이 긴 유형으로 연예인 가희님과 비슷한 비율을 가지고 있습니다.", "Remarks": "https://www.yna.co.kr/view/RPR20090909013200353", "Tags": "" }, "long_philtrum" : { "Name": "긴 하안부 (긴 인중도 고려할지)", "Description": "얼굴 하안부 인중이 긴 편으로 김나영과 같은 스타일리쉬한 이미지를 연출 할 수 있습니다.", "Remarks": "https://post.naver.com/viewer/postView.nhn?volumeNo=17850478&memberNo=37305250\n\nhttps://m.health.chosun.com/svc/news_view.html?contid=2016032901085", "Tags": "" }, "short_sanganbu" : { "Name": "짧은 상안부", "Description": "이마가 짧은 유형으로 연예인 김혜윤님과 비슷한 비율을 가지고 있습니다.", "Remarks": "", "Tags": "" }, "short_junganbu" : { "Name": "짧은 중안부", "Description": "중안부가 짧은 유형으로 연예인 송지효와 비슷한 비율을 가지고 있습니다.", "Remarks": "", "Tags": "" }, "short_haanbu" : { "Name": ":땀: 짧은 하안부..정보가 없어 > 무턱 대체 가능할런지", "Description": "오히려 반묶음으로\n고급스러운 이미지를 줄 수 있다고 했죠.", "Remarks": "", "Tags": "" }, "golden_face" : {"Name": "황금비율", "Description": "황금비율", "Remarks": "", "Tags": "" } })
+    recommend_result_faceshape = models.JSONField(default={"0":"0"})
+    recommend_result_faceratio = models.JSONField(default={"0":"0"})
+    face_width_height_ratio = models.JSONField(default={"0":"0"})
+    #face_width_height_ratio = models.FloatField(null=True, blank=True, default=0.0)
+    def save(self, *args, **kwargs):
+        #super().save(*args, **kwargs)
+        path = '/work/urs-server/media' + self.image_input.url
+        super(RecommendResult, self).save(*args, **kwargs)
+        fs_result_tmp=subprocess.check_output(['python', '/work/faceshape/get_faceshape.py', '/work/faceshape/urs_model.pt', path]) 
+        self.face_shape_result=fs_result_tmp.decode().strip()
+        with open('/work/urs-server/data/face_shape.json', 'r') as f:
+            self.face_shape_table = json.load(f)
+        with open('/work/urs-server/data/face_ratio.json', 'r') as f:
+            self.face_ratio_table = json.load(f)
+       
+        face_str=str(self.face)
+        face_str=face_str.replace("\'", "\"")
+        face_json=json.loads(face_str)
+
+        face_top = (face_json['face']['landmark']['face']['face_hairline_72']["y"]+face_json['face']['landmark']['face']['face_hairline_74']["y"])/2
+        face_eyebrow = (face_json['face']['landmark']['left_eyebrow']['left_eyebrow_31']["y"]+face_json['face']['landmark']['right_eyebrow']['right_eyebrow_31']["y"])/2
+        face_noseend = (face_json['face']['landmark']['nose']['nose_left_47']["y"]+face_json['face']['landmark']['nose']['nose_right_47']["y"])/2
+        face_jaw =  (face_json['face']['landmark']['face']['face_contour_left_0']["y"]+face_json['face']['landmark']['face']['face_contour_right_0']["y"])/2
+        face_height = face_jaw-face_top
+        face_width = 0
+        for i in range(0, 64):
+            tmp = face_json['face']['landmark']['face']["face_contour_right_" + str(i)]["x"] - face_json['face']['landmark']['face']["face_contour_left_" + str(i)]["x"] 
+           # print(tmp)
+            if face_width < tmp:
+                face_width = tmp
+        face_golden_ratio = 1.3
+        face_user_ratio = face_height/face_width
+        self.face_width_height_ratio =str(face_user_ratio)
+        tmp_faceshape = self.face_shape_result 
+        islong = False
+        isshort = False
+        diff_garosero = 1.15
+        if face_user_ratio >  face_golden_ratio * diff_garosero :
+            islong = True
+        elif face_user_ratio * diff_garosero < face_golden_ratio :
+            isshort = True
+        if isshort and tmp_faceshape != "oblog":
+            tmp_faceshape = "short_" + tmp_faceshape
+        elif islong and tmp_faceshape == "square":
+            tmp_faceshape = "square_oblog"
+        self.face_shape_result = tmp_faceshape
+        self.recommend_result_faceshape=self.face_shape_table[str(self.face_shape_result)]
+        
+        # face_top = ((face_json['face']['landmark']['face']['face_hairline_72']["x"]+face_json['face']['landmark']['face']['face_hairline_74']["x"])/2, (face_json['face']['landmark']['face']['face_hairline_72']["y"]+face_json['face']['landmark']['face']['face_hairline_74']["y"])/2)
+        # face_eyebrow = ((face_json['face']['landmark']['left_eyebrow']['left_eyebrow_31']["x"]+face_json['face']['landmark']['right_eyebrow']['right_eyebrow_31']["x"])/2, (face_json['face']['landmark']['left_eyebrow']['left_eyebrow_31']["y"]+face_json['face']['landmark']['right_eyebrow']['right_eyebrow_31']["y"])/2)
+        # face_noseend = ((face_json['face']['landmark']['nose']['nose_left_47']["x"]+face_json['face']['landmark']['nose']['nose_right_47']["x"])/2, (face_json['face']['landmark']['nose']['nose_left_47']["y"]+face_json['face']['landmark']['nose']['nose_right_47']["y"])/2)
+        # face_jaw = ((face_json['face']['landmark']['c']['face_contour_left_0']["x"]+face_json['face']['landmark']['face']['face_contour_right_0']["x"])/2, (face_json['face']['landmark']['face']['face_contour_left_0']["y"]+face_json['face']['landmark']['face']['face_contour_right_0']["y"])/2)
+        
+        sanganbu = face_eyebrow-face_top
+        junganbu = face_noseend-face_eyebrow
+        haanbu = face_jaw-face_noseend
+        face_ratio = "tmp"
+        diff_sangjungha = 1.15
+        print(face_jaw-face_top)
+        print(face_json['face']['face_rectangle']['height'])
+        print(face_json['face']['face_rectangle']['width'])
+        print(face_json['face']['landmark']['face']['face_hairline_0']["x"] - face_json['face']['landmark']['face']['face_hairline_144']["x"])
+        if sanganbu > junganbu * diff_sangjungha and sanganbu > haanbu * diff_sangjungha : 
+            face_ratio = "long_sanganbu"
+        elif junganbu > sanganbu * diff_sangjungha and junganbu > haanbu * diff_sangjungha : 
+            face_ratio = "long_junganbu"
+        elif haanbu > sanganbu * diff_sangjungha and haanbu > junganbu * diff_sangjungha : 
+            face_ratio = "long_haanbu"
+        elif sanganbu * diff_sangjungha < junganbu and sanganbu * diff_sangjungha < haanbu :
+            face_ratio = "short_sanganbu" 
+        elif junganbu * diff_sangjungha < sanganbu and junganbu * diff_sangjungha < haanbu :
+            face_ratio = "short_junganbu" 
+        elif haanbu * diff_sangjungha < junganbu and haanbu * diff_sangjungha < sanganbu :
+            face_ratio = "short_haanbu"
+        else :
+            face_ratio = "golden_face" 
+        self.recommend_result_faceratio = self.face_ratio_table[str(face_ratio)]
+        
+        return
+class SimulationStyleList(models.Model):
+    no = models.AutoField(db_column='NO', primary_key=True)
+    possible_style_img = models.ImageField(upload_to="media", default='default.jpeg')
+    simulation_style_img = models.ImageField(upload_to="media", default='default.jpeg')
+    recommend = models.ForeignKey(RecommendResult, on_delete=models.CASCADE, related_name="simulation_style_list", null=True, blank=True)
+    def __str__(self):
+        return f"{self.possible_style_img},{self.simulation_style_img}"

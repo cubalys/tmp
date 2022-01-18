@@ -1,0 +1,3 @@
+stunnel stunnel/dev_https.conf &
+python manage.py runserver 0.0.0.0:80
+HTTPS=1 python manage.py runserver 0.0.0.0:3389

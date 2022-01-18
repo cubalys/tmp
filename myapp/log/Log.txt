@@ -1,0 +1,7 @@
+[2021.11.02/07:49:41] - Traceback (most recent call last):
+  File "/work/urs-server/myapp/models.py", line 331, in save
+    gi1.main(urs_config)
+  File "/work/urs-server/myapp/stargan_v2/gen_img.py", line 40, in main
+    1/0
+ZeroDivisionError: division by zero
+
